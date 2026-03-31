@@ -1,6 +1,9 @@
+touch .gitignore
+```
 
+Then open it and paste this in:
+```
 target/
-
-.env
-
+*.class
+*.jar
 .DS_Store
