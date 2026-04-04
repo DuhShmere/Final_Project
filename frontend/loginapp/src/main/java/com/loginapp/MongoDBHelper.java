@@ -3,6 +3,7 @@ package com.loginapp;
 import com.mongodb.client.*;
 import org.bson.Document;
 import java.util.HashMap;
+import java.util.List;
 
 public class MongoDBHelper {
 
@@ -19,7 +20,6 @@ public class MongoDBHelper {
         usersCollection = database.getCollection(COLLECTION_NAME);
     }
 
-    // Replaces IdandPasswords.getloginInfo()
     public HashMap<String, String> getloginInfo() {
         HashMap<String, String> users = new HashMap<>();
         for (Document doc : usersCollection.find()) {
@@ -32,18 +32,31 @@ public class MongoDBHelper {
         return users;
     }
 
-    // Saves a new user to MongoDB
     public boolean saveUser(String username, String password) {
         Document existing = usersCollection
                 .find(new Document("username", username))
                 .first();
         if (existing != null)
-            return false; // user already exists
+            return false;
 
         usersCollection.insertOne(
                 new Document("username", username)
                         .append("password", password));
         return true;
+    }
+
+    public void saveUserPreferences(String username, List<String> checkedIngredients) {
+        usersCollection.updateOne(
+                new Document("username", username),
+                new Document("$set", new Document("ingredients", checkedIngredients)));
+    }
+
+    public List<String> loadUserPreferences(String username) {
+        Document user = usersCollection.find(new Document("username", username)).first();
+        if (user != null && user.containsKey("ingredients")) {
+            return user.getList("ingredients", String.class);
+        }
+        return null;
     }
 
     public void close() {
