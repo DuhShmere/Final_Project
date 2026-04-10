@@ -44,7 +44,7 @@ public class HomePage {
         navBar.add(logOutBtn);
 
         mealPlanBtn.addActionListener(e -> showPage(new MealPlanPanel(), false));
-        mealSwipeBtn.addActionListener(e-> showPage(new MealSwipingPanel(),false));
+        mealSwipeBtn.addActionListener(e -> showPage(new MealSwipingPanel(), false));
         homeBtn.addActionListener(e -> showPage(homeLabel, true));
         settingsBtn.addActionListener(
                 e -> showPage(new SettingsPanel(() -> showPage(homeLabel, true), db, username), false));
