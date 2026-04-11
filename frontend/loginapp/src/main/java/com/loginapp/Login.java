@@ -5,10 +5,6 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.HashMap;
-<<<<<<< HEAD
-=======
-
->>>>>>> ed34ceed499a3c427b04f17ed6b59474442448b1
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
