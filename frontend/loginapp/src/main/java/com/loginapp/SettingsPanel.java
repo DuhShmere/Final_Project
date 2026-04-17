@@ -4,9 +4,10 @@ import java.awt.*;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import org.json.JSONArray;
@@ -15,6 +16,13 @@ import org.json.JSONObject;
 public class SettingsPanel extends JPanel {
 
     private static final String INGREDIENTS_URL = "https://www.themealdb.com/api/json/v1/1/list.php?i=list";
+
+    // Parent categories that will have subsections
+    private static final List<String> PARENT_KEYWORDS = Arrays.asList(
+            "Beef", "Chicken", "Pork", "Lamb", "Fish", "Cheese",
+            "Mushroom", "Pepper", "Tomato", "Onion", "Rice", "Potato",
+            "Milk", "Cream", "Vinegar", "Oil", "Sauce", "Wine",
+            "Beans", "Lemon", "Orange", "Sugar", "Flour", "Butter");
 
     private List<JCheckBox> allCheckBoxes = new ArrayList<>();
     private List<String> allIngredients = new ArrayList<>();
@@ -44,7 +52,8 @@ public class SettingsPanel extends JPanel {
 
         saveBtn.addActionListener(e -> {
             savePreferences();
-            JOptionPane.showMessageDialog(this, "Preferences saved!", "Saved", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Preferences saved!", "Saved",
+                    JOptionPane.INFORMATION_MESSAGE);
         });
 
         topBar.add(homeBtn);
@@ -52,7 +61,7 @@ public class SettingsPanel extends JPanel {
         topBar.add(savedLabel);
         add(topBar, BorderLayout.NORTH);
 
-        // Search bar on the right side
+        // Search bar on the right
         JPanel searchPanel = new JPanel(new BorderLayout(5, 5));
         searchPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         searchPanel.setPreferredSize(new Dimension(200, 0));
@@ -62,13 +71,11 @@ public class SettingsPanel extends JPanel {
 
         searchField = new JTextField();
         searchField.setFont(new Font(null, Font.PLAIN, 13));
-        searchField.putClientProperty("JTextField.placeholderText", "Type to search...");
 
         JButton clearBtn = new JButton("Clear");
         clearBtn.setFont(new Font(null, Font.PLAIN, 12));
         clearBtn.addActionListener(e -> searchField.setText(""));
 
-        // Results panel inside search
         JPanel searchResultsPanel = new JPanel();
         searchResultsPanel.setLayout(new BoxLayout(searchResultsPanel, BoxLayout.Y_AXIS));
         JScrollPane searchScroll = new JScrollPane(searchResultsPanel);
@@ -83,7 +90,6 @@ public class SettingsPanel extends JPanel {
         searchPanel.add(searchTop, BorderLayout.NORTH);
         searchPanel.add(searchScroll, BorderLayout.CENTER);
 
-        // Live search listener
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) {
                 filterIngredients(searchResultsPanel);
@@ -136,13 +142,8 @@ public class SettingsPanel extends JPanel {
             protected void done() {
                 listPanel.remove(loadingLabel);
                 allIngredients = fetchedIngredients;
-
-                // Load saved preferences
                 List<String> savedPreferences = db.loadUserPreferences(username);
-
-                // Build the full ingredient list
                 buildIngredientList(fetchedIngredients, savedPreferences);
-
                 listPanel.revalidate();
                 listPanel.repaint();
             }
@@ -156,23 +157,18 @@ public class SettingsPanel extends JPanel {
             URL url = new URL(INGREDIENTS_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-
             InputStream is = conn.getInputStream();
             String response = new String(is.readAllBytes());
             conn.disconnect();
 
             JSONObject root = new JSONObject(response);
             JSONArray meals = root.getJSONArray("meals");
-
             for (int i = 0; i < meals.length(); i++) {
                 String name = meals.getJSONObject(i).optString("strIngredient", "").trim();
-                if (!name.isEmpty()) {
+                if (!name.isEmpty())
                     ingredients.add(name);
-                }
             }
-
             ingredients.sort(String::compareToIgnoreCase);
-
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -180,35 +176,136 @@ public class SettingsPanel extends JPanel {
     }
 
     private void buildIngredientList(List<String> ingredients, List<String> savedPreferences) {
+        // Group ingredients by parent keyword
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
+        List<String> standalone = new ArrayList<>();
+
+        for (String ingredient : ingredients) {
+            String parent = findParent(ingredient);
+            if (parent != null && !parent.equalsIgnoreCase(ingredient)) {
+                grouped.computeIfAbsent(parent, k -> new ArrayList<>()).add(ingredient);
+            } else if (parent != null && parent.equalsIgnoreCase(ingredient)) {
+                // The ingredient IS the parent keyword itself
+                grouped.computeIfAbsent(parent, k -> new ArrayList<>());
+                standalone.add(ingredient);
+            } else {
+                standalone.add(ingredient);
+            }
+        }
+
         char currentLetter = 0;
 
+        // Build grouped parents first
         for (String ingredient : ingredients) {
             char firstLetter = Character.toUpperCase(ingredient.charAt(0));
 
+            // Letter header
             if (firstLetter != currentLetter) {
                 currentLetter = firstLetter;
-
-                JLabel catLabel = new JLabel("— " + firstLetter + " —");
-                catLabel.setFont(new Font(null, Font.BOLD, 14));
-                catLabel.setForeground(new Color(80, 80, 80));
-                catLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-                catLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 4, 0));
-                listPanel.add(catLabel);
+                JLabel letterLabel = new JLabel("— " + firstLetter + " —");
+                letterLabel.setFont(new Font(null, Font.BOLD, 14));
+                letterLabel.setForeground(new Color(80, 80, 80));
+                letterLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                letterLabel.setBorder(BorderFactory.createEmptyBorder(12, 0, 4, 0));
+                listPanel.add(letterLabel);
             }
 
-            JCheckBox checkBox = new JCheckBox(ingredient);
-            checkBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+            String parent = findParent(ingredient);
 
-            // Default all checked
-            if (savedPreferences == null || savedPreferences.isEmpty()) {
-                checkBox.setSelected(true);
-            } else {
-                checkBox.setSelected(savedPreferences.contains(ingredient));
+            if (parent != null && parent.equalsIgnoreCase(ingredient)
+                    && grouped.containsKey(parent)
+                    && !grouped.get(parent).isEmpty()) {
+                // This is a parent with children — make it collapsible
+                addCollapsibleGroup(parent, grouped.get(parent), savedPreferences);
+            } else if (parent == null || parent.equalsIgnoreCase(ingredient)) {
+                // Standalone ingredient
+                addCheckbox(ingredient, savedPreferences);
             }
-
-            allCheckBoxes.add(checkBox);
-            listPanel.add(checkBox);
+            // Skip children here — they are added inside collapsible group
         }
+    }
+
+    private void addCollapsibleGroup(String parentName, List<String> children,
+            List<String> savedPreferences) {
+        // Parent row with toggle button
+        JPanel parentRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        parentRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        parentRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+
+        JButton toggleBtn = new JButton("▶");
+        toggleBtn.setFont(new Font(null, Font.PLAIN, 10));
+        toggleBtn.setPreferredSize(new Dimension(28, 22));
+        toggleBtn.setFocusPainted(false);
+        toggleBtn.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+
+        JCheckBox parentCheckbox = new JCheckBox(parentName);
+        parentCheckbox.setFont(new Font(null, Font.BOLD, 13));
+        boolean parentSelected = savedPreferences == null || savedPreferences.isEmpty()
+                || savedPreferences.contains(parentName);
+        parentCheckbox.setSelected(parentSelected);
+        allCheckBoxes.add(parentCheckbox);
+
+        parentRow.add(toggleBtn);
+        parentRow.add(parentCheckbox);
+        listPanel.add(parentRow);
+
+        // Children panel (hidden by default)
+        JPanel childrenPanel = new JPanel();
+        childrenPanel.setLayout(new BoxLayout(childrenPanel, BoxLayout.Y_AXIS));
+        childrenPanel.setBorder(BorderFactory.createEmptyBorder(0, 30, 0, 0));
+        childrenPanel.setVisible(false);
+        childrenPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        for (String child : children) {
+            JCheckBox childBox = new JCheckBox(child);
+            childBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+            boolean selected = savedPreferences == null || savedPreferences.isEmpty()
+                    || savedPreferences.contains(child);
+            childBox.setSelected(selected);
+            allCheckBoxes.add(childBox);
+            childrenPanel.add(childBox);
+        }
+
+        listPanel.add(childrenPanel);
+
+        // Toggle button shows/hides children
+        toggleBtn.addActionListener(e -> {
+            boolean visible = childrenPanel.isVisible();
+            childrenPanel.setVisible(!visible);
+            toggleBtn.setText(visible ? "▶" : "▼");
+            listPanel.revalidate();
+            listPanel.repaint();
+        });
+
+        // Parent checkbox toggles all children
+        parentCheckbox.addActionListener(e -> {
+            boolean selected = parentCheckbox.isSelected();
+            for (Component c : childrenPanel.getComponents()) {
+                if (c instanceof JCheckBox) {
+                    ((JCheckBox) c).setSelected(selected);
+                }
+            }
+        });
+    }
+
+    private void addCheckbox(String ingredient, List<String> savedPreferences) {
+        JCheckBox checkBox = new JCheckBox(ingredient);
+        checkBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+        boolean selected = savedPreferences == null || savedPreferences.isEmpty()
+                || savedPreferences.contains(ingredient);
+        checkBox.setSelected(selected);
+        allCheckBoxes.add(checkBox);
+        listPanel.add(checkBox);
+    }
+
+    // Finds which parent keyword an ingredient belongs to
+    private String findParent(String ingredient) {
+        for (String keyword : PARENT_KEYWORDS) {
+            if (ingredient.toLowerCase().contains(keyword.toLowerCase())) {
+                return keyword;
+            }
+        }
+        return null;
     }
 
     private void filterIngredients(JPanel searchResultsPanel) {
@@ -221,21 +318,14 @@ public class SettingsPanel extends JPanel {
             return;
         }
 
-        // Find matching checkboxes and mirror them in the search results panel
         for (JCheckBox original : allCheckBoxes) {
             if (original.getText().toLowerCase().contains(query)) {
-                // Create a mirrored checkbox that syncs with the original
                 JCheckBox mirror = new JCheckBox(original.getText());
                 mirror.setSelected(original.isSelected());
                 mirror.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-                mirror.addActionListener(e -> {
-                    original.setSelected(mirror.isSelected());
-                });
-
-                original.addActionListener(e -> {
-                    mirror.setSelected(original.isSelected());
-                });
+                mirror.addActionListener(e -> original.setSelected(mirror.isSelected()));
+                original.addActionListener(e -> mirror.setSelected(original.isSelected()));
 
                 searchResultsPanel.add(mirror);
             }
@@ -248,9 +338,8 @@ public class SettingsPanel extends JPanel {
     private void savePreferences() {
         List<String> checked = new ArrayList<>();
         for (JCheckBox cb : allCheckBoxes) {
-            if (cb.isSelected()) {
+            if (cb.isSelected())
                 checked.add(cb.getText());
-            }
         }
         db.saveUserPreferences(username, checked);
     }

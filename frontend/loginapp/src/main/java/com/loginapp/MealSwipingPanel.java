@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.List;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -16,6 +17,7 @@ public class MealSwipingPanel extends JPanel {
 
     private static final String MEALDB_URL = "https://www.themealdb.com/api/json/v1/1/random.php";
     private static final String CALORIE_URL = "https://api.calorieninjas.com/v1/nutrition?query=";
+    private static final int MAX_ATTEMPTS = 20; // max tries before giving up
     private static final String CALORIE_API_KEY;
 
     static {
@@ -27,6 +29,7 @@ public class MealSwipingPanel extends JPanel {
     }
 
     private boolean showingFront = true;
+    private List<String> userPreferences = null;
 
     // Front card data
     private String mealName = "Loading...";
@@ -49,17 +52,14 @@ public class MealSwipingPanel extends JPanel {
     private JPanel cardPanel = new JPanel();
     private JPanel frontPanel = new JPanel();
     private JPanel backPanel = new JPanel();
-
     private JLabel imageLabel = new JLabel("", JLabel.CENTER);
     private JLabel nameLabel = new JLabel("", JLabel.CENTER);
     private JLabel categoryLabel = new JLabel("", JLabel.CENTER);
-
     private JLabel calLabel = new JLabel();
     private JLabel fatLabel = new JLabel();
     private JLabel proteinLabel = new JLabel();
     private JLabel carbsLabel = new JLabel();
     private JTextArea ingredientsArea = new JTextArea();
-
     private JButton likeButton = new JButton("👍 Like");
     private JButton dislikeButton = new JButton("👎 Dislike");
     private JButton nextButton = new JButton("Next ➡");
@@ -70,6 +70,9 @@ public class MealSwipingPanel extends JPanel {
     public MealSwipingPanel(MongoDBHelper db, String username) {
         this.db = db;
         this.username = username;
+
+        // Load user preferences from MongoDB
+        userPreferences = db.loadUserPreferences(username);
 
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
@@ -106,7 +109,6 @@ public class MealSwipingPanel extends JPanel {
 
         flipHint.setFont(new Font(null, Font.ITALIC, 11));
         flipHint.setForeground(Color.DARK_GRAY);
-
         statusLabel.setFont(new Font(null, Font.BOLD, 13));
 
         styleButton(likeButton, new Color(100, 200, 100));
@@ -114,27 +116,23 @@ public class MealSwipingPanel extends JPanel {
         styleButton(nextButton, new Color(180, 180, 180));
         styleButton(backButton, new Color(180, 180, 180));
 
-        // Like - saves to MongoDB but stays on current card
         likeButton.addActionListener(e -> {
             db.saveLikedMeal(username, mealName, mealCategory, calories);
             statusLabel.setForeground(new Color(0, 150, 0));
             statusLabel.setText("Liked: " + mealName + " saved!");
         });
 
-        // Dislike - saves to MongoDB but stays on current card
         dislikeButton.addActionListener(e -> {
             db.saveDislikedMeal(username, mealName);
             statusLabel.setForeground(new Color(180, 0, 0));
             statusLabel.setText("Disliked: " + mealName);
         });
 
-        // Next - loads a new meal
         nextButton.addActionListener(e -> {
             statusLabel.setText("");
             loadNextMeal();
         });
 
-        // Prev - placeholder for now
         backButton.addActionListener(e -> {
             statusLabel.setText("");
             System.out.println("Back clicked");
@@ -238,28 +236,42 @@ public class MealSwipingPanel extends JPanel {
 
         imageLabel.setIcon(null);
         imageLabel.setText("Loading...");
-        nameLabel.setText("Fetching meal...");
+        nameLabel.setText("Finding a meal for you...");
         categoryLabel.setText("");
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            private boolean found = false;
+
             @Override
             protected Void doInBackground() throws Exception {
-                fetchMealData();
+                // Try up to MAX_ATTEMPTS times to find a matching meal
+                for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                    boolean matches = fetchMealData();
+                    if (matches) {
+                        found = true;
+                        break;
+                    }
+                }
                 return null;
             }
 
             @Override
             protected void done() {
-                updateFrontUI();
-                updateBackUI();
+                if (found) {
+                    updateFrontUI();
+                    updateBackUI();
+                } else {
+                    // No matching meal found
+                    showNoMealsFound();
+                }
             }
         };
         worker.execute();
     }
 
-    private void fetchMealData() {
+    // Returns true if the meal matches the user's preferences
+    private boolean fetchMealData() {
         try {
-            // Step 1: Fetch meal from TheMealDB
             URL url = new URL(MEALDB_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
@@ -271,11 +283,40 @@ public class MealSwipingPanel extends JPanel {
             JSONObject root = new JSONObject(response);
             JSONObject meal = root.getJSONArray("meals").getJSONObject(0);
 
+            // Extract meal ingredients from API response
+            List<String> mealIngredients = new java.util.ArrayList<>();
+            for (int i = 1; i <= 20; i++) {
+                String ingr = meal.optString("strIngredient" + i, "").trim();
+                if (!ingr.isEmpty()) {
+                    mealIngredients.add(ingr.toLowerCase());
+                }
+            }
+
+            // Check if meal matches user preferences
+            // If user has no preferences saved show all meals
+            if (userPreferences != null && !userPreferences.isEmpty()) {
+                boolean hasMatch = false;
+                for (String mealIngr : mealIngredients) {
+                    for (String pref : userPreferences) {
+                        if (pref.toLowerCase().contains(mealIngr) ||
+                                mealIngr.contains(pref.toLowerCase())) {
+                            hasMatch = true;
+                            break;
+                        }
+                    }
+                    if (hasMatch)
+                        break;
+                }
+                // If no ingredient matches user preferences skip this meal
+                if (!hasMatch)
+                    return false;
+            }
+
+            // Meal matches — store its data
             mealName = meal.optString("strMeal", "Unknown");
             mealCategory = meal.optString("strCategory", "");
             mealArea = meal.optString("strArea", "");
 
-            // Build ingredients list
             StringBuilder ingrBuilder = new StringBuilder();
             for (int i = 1; i <= 20; i++) {
                 String ingr = meal.optString("strIngredient" + i, "").trim();
@@ -288,13 +329,12 @@ public class MealSwipingPanel extends JPanel {
             }
             ingredients = ingrBuilder.toString();
 
-            // Step 2: Load image
             String imageUrl = meal.optString("strMealThumb", "");
             if (!imageUrl.isEmpty()) {
                 mealImage = ImageIO.read(new URL(imageUrl));
             }
 
-            // Step 3: Fetch nutrition from CalorieNinjas
+            // Fetch nutrition data
             if (!CALORIE_API_KEY.isEmpty()) {
                 String query = mealName.replace(" ", "+");
                 URL calUrl = new URL(CALORIE_URL + query);
@@ -328,17 +368,29 @@ public class MealSwipingPanel extends JPanel {
                 carbs = "N/A";
             }
 
+            return true;
+
         } catch (Exception e) {
-            mealName = "Error loading meal";
-            calories = "N/A";
-            fat = "N/A";
-            protein = "N/A";
-            carbs = "N/A";
             e.printStackTrace();
+            return false;
         }
     }
 
+    private void showNoMealsFound() {
+        imageLabel.setIcon(null);
+        imageLabel.setText("");
+        nameLabel.setFont(new Font(null, Font.BOLD, 18));
+        nameLabel.setText("No more available recipes");
+        categoryLabel.setText("Try updating your ingredient preferences in Settings");
+        cardPanel.setBackground(new Color(240, 240, 240));
+        likeButton.setEnabled(false);
+        dislikeButton.setEnabled(false);
+    }
+
     private void updateFrontUI() {
+        likeButton.setEnabled(true);
+        dislikeButton.setEnabled(true);
+        nameLabel.setFont(new Font(null, Font.BOLD, 16));
         nameLabel.setText(mealName);
         categoryLabel.setText(mealCategory + (mealArea.isEmpty() ? "" : " · " + mealArea));
 
