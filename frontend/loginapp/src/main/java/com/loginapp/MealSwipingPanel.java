@@ -41,6 +41,10 @@ public class MealSwipingPanel extends JPanel {
     private String carbs = "--";
     private String ingredients = "";
 
+    // MongoDB and user
+    private MongoDBHelper db;
+    private String username;
+
     // UI Components
     private JPanel cardPanel = new JPanel();
     private JPanel frontPanel = new JPanel();
@@ -61,8 +65,12 @@ public class MealSwipingPanel extends JPanel {
     private JButton nextButton = new JButton("Next ➡");
     private JButton backButton = new JButton("⬅ Prev");
     private JLabel flipHint = new JLabel("Click card to flip", JLabel.CENTER);
+    private JLabel statusLabel = new JLabel("", JLabel.CENTER);
 
-    public MealSwipingPanel() {
+    public MealSwipingPanel(MongoDBHelper db, String username) {
+        this.db = db;
+        this.username = username;
+
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
 
@@ -99,21 +107,38 @@ public class MealSwipingPanel extends JPanel {
         flipHint.setFont(new Font(null, Font.ITALIC, 11));
         flipHint.setForeground(Color.DARK_GRAY);
 
+        statusLabel.setFont(new Font(null, Font.BOLD, 13));
+
         styleButton(likeButton, new Color(100, 200, 100));
         styleButton(dislikeButton, new Color(200, 100, 100));
         styleButton(nextButton, new Color(180, 180, 180));
         styleButton(backButton, new Color(180, 180, 180));
 
+        // Like - saves to MongoDB but stays on current card
         likeButton.addActionListener(e -> {
-            System.out.println("Liked: " + mealName);
-            loadNextMeal();
+            db.saveLikedMeal(username, mealName, mealCategory, calories);
+            statusLabel.setForeground(new Color(0, 150, 0));
+            statusLabel.setText("Liked: " + mealName + " saved!");
         });
+
+        // Dislike - saves to MongoDB but stays on current card
         dislikeButton.addActionListener(e -> {
-            System.out.println("Disliked: " + mealName);
+            db.saveDislikedMeal(username, mealName);
+            statusLabel.setForeground(new Color(180, 0, 0));
+            statusLabel.setText("Disliked: " + mealName);
+        });
+
+        // Next - loads a new meal
+        nextButton.addActionListener(e -> {
+            statusLabel.setText("");
             loadNextMeal();
         });
-        nextButton.addActionListener(e -> loadNextMeal());
-        backButton.addActionListener(e -> System.out.println("Back clicked"));
+
+        // Prev - placeholder for now
+        backButton.addActionListener(e -> {
+            statusLabel.setText("");
+            System.out.println("Back clicked");
+        });
 
         buttonRow.add(dislikeButton);
         buttonRow.add(backButton);
@@ -122,9 +147,9 @@ public class MealSwipingPanel extends JPanel {
 
         bottomPanel.add(flipHint, BorderLayout.NORTH);
         bottomPanel.add(buttonRow, BorderLayout.CENTER);
+        bottomPanel.add(statusLabel, BorderLayout.SOUTH);
         add(bottomPanel, BorderLayout.SOUTH);
 
-        // Load first meal
         loadNextMeal();
     }
 
@@ -216,7 +241,7 @@ public class MealSwipingPanel extends JPanel {
         nameLabel.setText("Fetching meal...");
         categoryLabel.setText("");
 
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
                 fetchMealData();
@@ -297,7 +322,6 @@ public class MealSwipingPanel extends JPanel {
                     carbs = "N/A";
                 }
             } else {
-                System.out.println("No API key found in .env file");
                 calories = "N/A";
                 fat = "N/A";
                 protein = "N/A";
