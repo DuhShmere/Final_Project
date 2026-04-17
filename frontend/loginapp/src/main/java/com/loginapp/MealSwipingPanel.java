@@ -17,7 +17,7 @@ public class MealSwipingPanel extends JPanel {
 
     private static final String MEALDB_URL = "https://www.themealdb.com/api/json/v1/1/random.php";
     private static final String CALORIE_URL = "https://api.calorieninjas.com/v1/nutrition?query=";
-    private static final int MAX_ATTEMPTS = 20; // max tries before giving up
+    private static final int MAX_ATTEMPTS = 20;
     private static final String CALORIE_API_KEY;
 
     static {
@@ -116,23 +116,27 @@ public class MealSwipingPanel extends JPanel {
         styleButton(nextButton, new Color(180, 180, 180));
         styleButton(backButton, new Color(180, 180, 180));
 
+        // Like - saves to MongoDB but stays on current card
         likeButton.addActionListener(e -> {
             db.saveLikedMeal(username, mealName, mealCategory, calories);
             statusLabel.setForeground(new Color(0, 150, 0));
             statusLabel.setText("Liked: " + mealName + " saved!");
         });
 
+        // Dislike - saves to MongoDB but stays on current card
         dislikeButton.addActionListener(e -> {
             db.saveDislikedMeal(username, mealName);
             statusLabel.setForeground(new Color(180, 0, 0));
             statusLabel.setText("Disliked: " + mealName);
         });
 
+        // Next - loads a new meal
         nextButton.addActionListener(e -> {
             statusLabel.setText("");
             loadNextMeal();
         });
 
+        // Prev - placeholder
         backButton.addActionListener(e -> {
             statusLabel.setText("");
             System.out.println("Back clicked");
@@ -244,7 +248,6 @@ public class MealSwipingPanel extends JPanel {
 
             @Override
             protected Void doInBackground() throws Exception {
-                // Try up to MAX_ATTEMPTS times to find a matching meal
                 for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
                     boolean matches = fetchMealData();
                     if (matches) {
@@ -261,7 +264,6 @@ public class MealSwipingPanel extends JPanel {
                     updateFrontUI();
                     updateBackUI();
                 } else {
-                    // No matching meal found
                     showNoMealsFound();
                 }
             }
@@ -269,13 +271,12 @@ public class MealSwipingPanel extends JPanel {
         worker.execute();
     }
 
-    // Returns true if the meal matches the user's preferences
     private boolean fetchMealData() {
         try {
+            // Step 1: Fetch meal from TheMealDB
             URL url = new URL(MEALDB_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-
             InputStream is = conn.getInputStream();
             String response = new String(is.readAllBytes());
             conn.disconnect();
@@ -283,17 +284,15 @@ public class MealSwipingPanel extends JPanel {
             JSONObject root = new JSONObject(response);
             JSONObject meal = root.getJSONArray("meals").getJSONObject(0);
 
-            // Extract meal ingredients from API response
+            // Extract meal ingredients
             List<String> mealIngredients = new java.util.ArrayList<>();
             for (int i = 1; i <= 20; i++) {
                 String ingr = meal.optString("strIngredient" + i, "").trim();
-                if (!ingr.isEmpty()) {
+                if (!ingr.isEmpty())
                     mealIngredients.add(ingr.toLowerCase());
-                }
             }
 
             // Check if meal matches user preferences
-            // If user has no preferences saved show all meals
             if (userPreferences != null && !userPreferences.isEmpty()) {
                 boolean hasMatch = false;
                 for (String mealIngr : mealIngredients) {
@@ -307,12 +306,11 @@ public class MealSwipingPanel extends JPanel {
                     if (hasMatch)
                         break;
                 }
-                // If no ingredient matches user preferences skip this meal
                 if (!hasMatch)
                     return false;
             }
 
-            // Meal matches — store its data
+            // Store meal data
             mealName = meal.optString("strMeal", "Unknown");
             mealCategory = meal.optString("strCategory", "");
             mealArea = meal.optString("strArea", "");
@@ -334,28 +332,30 @@ public class MealSwipingPanel extends JPanel {
                 mealImage = ImageIO.read(new URL(imageUrl));
             }
 
-            // Fetch nutrition data
+            // Step 2: Fetch nutrition from CalorieNinjas
             if (!CALORIE_API_KEY.isEmpty()) {
-                String query = mealName.replace(" ", "+");
-                URL calUrl = new URL(CALORIE_URL + query);
-                HttpURLConnection calConn = (HttpURLConnection) calUrl.openConnection();
-                calConn.setRequestMethod("GET");
-                calConn.setRequestProperty("X-Api-Key", CALORIE_API_KEY);
+                // Clean meal name
+                String cleanName = mealName
+                        .replaceAll("[^a-zA-Z0-9 ]", " ")
+                        .replaceAll("\\s+", " ")
+                        .trim();
 
-                InputStream calIs = calConn.getInputStream();
-                String calResponse = new String(calIs.readAllBytes());
-                calConn.disconnect();
+                // Try full meal name first
+                boolean nutritionFound = fetchNutrition(cleanName);
 
-                JSONObject calRoot = new JSONObject(calResponse);
-                JSONArray items = calRoot.getJSONArray("items");
+                // Try first two words if full name fails
+                if (!nutritionFound && cleanName.contains(" ")) {
+                    String shortName = cleanName.split(" ")[0] + " "
+                            + cleanName.split(" ")[1];
+                    nutritionFound = fetchNutrition(shortName);
+                }
 
-                if (items.length() > 0) {
-                    JSONObject nutrition = items.getJSONObject(0);
-                    calories = String.format("%.0f", nutrition.optDouble("calories", 0));
-                    fat = String.format("%.1f", nutrition.optDouble("fat_total_g", 0));
-                    protein = String.format("%.1f", nutrition.optDouble("protein_g", 0));
-                    carbs = String.format("%.1f", nutrition.optDouble("carbohydrates_total_g", 0));
-                } else {
+                // Try main ingredient if name attempts fail
+                if (!nutritionFound && !mealIngredients.isEmpty()) {
+                    nutritionFound = fetchNutrition(mealIngredients.get(0));
+                }
+
+                if (!nutritionFound) {
                     calories = "N/A";
                     fat = "N/A";
                     protein = "N/A";
@@ -372,6 +372,36 @@ public class MealSwipingPanel extends JPanel {
 
         } catch (Exception e) {
             e.printStackTrace();
+            return false;
+        }
+    }
+
+    private boolean fetchNutrition(String query) {
+        try {
+            String encodedQuery = query.replace(" ", "+");
+            URL calUrl = new URL(CALORIE_URL + encodedQuery);
+            HttpURLConnection calConn = (HttpURLConnection) calUrl.openConnection();
+            calConn.setRequestMethod("GET");
+            calConn.setRequestProperty("X-Api-Key", CALORIE_API_KEY);
+
+            InputStream calIs = calConn.getInputStream();
+            String calResponse = new String(calIs.readAllBytes());
+            calConn.disconnect();
+
+            JSONObject calRoot = new JSONObject(calResponse);
+            JSONArray items = calRoot.getJSONArray("items");
+
+            if (items.length() > 0) {
+                JSONObject nutrition = items.getJSONObject(0);
+                calories = String.format("%.0f", nutrition.optDouble("calories", 0));
+                fat = String.format("%.1f", nutrition.optDouble("fat_total_g", 0));
+                protein = String.format("%.1f", nutrition.optDouble("protein_g", 0));
+                carbs = String.format("%.1f", nutrition.optDouble("carbohydrates_total_g", 0));
+                return true;
+            }
+            return false;
+
+        } catch (Exception e) {
             return false;
         }
     }
