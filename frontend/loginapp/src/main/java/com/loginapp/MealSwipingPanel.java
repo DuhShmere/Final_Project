@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -28,16 +29,39 @@ public class MealSwipingPanel extends JPanel {
         CALORIE_API_KEY = dotenv.get("CALORIE_API_KEY", "");
     }
 
+    // Meal history for back button
+    private List<MealData> mealHistory = new ArrayList<>();
+    private int historyIndex = -1;
+
+    // Inner class to store all data for a single meal
+    private static class MealData {
+        String name, category, area, ingredients;
+        String calories, fat, protein, carbs;
+        BufferedImage image;
+
+        MealData(String name, String category, String area, String ingredients,
+                String calories, String fat, String protein, String carbs,
+                BufferedImage image) {
+            this.name = name;
+            this.category = category;
+            this.area = area;
+            this.ingredients = ingredients;
+            this.calories = calories;
+            this.fat = fat;
+            this.protein = protein;
+            this.carbs = carbs;
+            this.image = image;
+        }
+    }
+
     private boolean showingFront = true;
     private List<String> userPreferences = null;
 
-    // Front card data
+    // Current meal data
     private String mealName = "Loading...";
     private String mealCategory = "";
     private String mealArea = "";
     private BufferedImage mealImage = null;
-
-    // Back card data
     private String calories = "--";
     private String fat = "--";
     private String protein = "--";
@@ -66,12 +90,12 @@ public class MealSwipingPanel extends JPanel {
     private JButton backButton = new JButton("⬅ Prev");
     private JLabel flipHint = new JLabel("Click card to flip", JLabel.CENTER);
     private JLabel statusLabel = new JLabel("", JLabel.CENTER);
+    private JLabel historyLabel = new JLabel("", JLabel.CENTER);
 
     public MealSwipingPanel(MongoDBHelper db, String username) {
         this.db = db;
         this.username = username;
 
-        // Load user preferences from MongoDB
         userPreferences = db.loadUserPreferences(username);
 
         setLayout(new BorderLayout(10, 10));
@@ -110,36 +134,51 @@ public class MealSwipingPanel extends JPanel {
         flipHint.setFont(new Font(null, Font.ITALIC, 11));
         flipHint.setForeground(Color.DARK_GRAY);
         statusLabel.setFont(new Font(null, Font.BOLD, 13));
+        historyLabel.setFont(new Font(null, Font.ITALIC, 11));
+        historyLabel.setForeground(Color.GRAY);
 
         styleButton(likeButton, new Color(100, 200, 100));
         styleButton(dislikeButton, new Color(200, 100, 100));
         styleButton(nextButton, new Color(180, 180, 180));
         styleButton(backButton, new Color(180, 180, 180));
 
-        // Like - saves to MongoDB but stays on current card
+        // Disable back button initially since there is no history yet
+        backButton.setEnabled(false);
+
         likeButton.addActionListener(e -> {
             db.saveLikedMeal(username, mealName, mealCategory, calories);
             statusLabel.setForeground(new Color(0, 150, 0));
             statusLabel.setText("Liked: " + mealName + " saved!");
         });
 
-        // Dislike - saves to MongoDB but stays on current card
         dislikeButton.addActionListener(e -> {
             db.saveDislikedMeal(username, mealName);
             statusLabel.setForeground(new Color(180, 0, 0));
             statusLabel.setText("Disliked: " + mealName);
         });
 
-        // Next - loads a new meal
         nextButton.addActionListener(e -> {
             statusLabel.setText("");
-            loadNextMeal();
+            // If we are not at the end of history navigate forward
+            if (historyIndex < mealHistory.size() - 1) {
+                historyIndex++;
+                displayMealFromHistory(mealHistory.get(historyIndex));
+                updateHistoryLabel();
+                updateBackButton();
+            } else {
+                // Fetch a brand new meal
+                loadNextMeal();
+            }
         });
 
-        // Prev - placeholder
         backButton.addActionListener(e -> {
             statusLabel.setText("");
-            System.out.println("Back clicked");
+            if (historyIndex > 0) {
+                historyIndex--;
+                displayMealFromHistory(mealHistory.get(historyIndex));
+                updateHistoryLabel();
+                updateBackButton();
+            }
         });
 
         buttonRow.add(dislikeButton);
@@ -147,7 +186,11 @@ public class MealSwipingPanel extends JPanel {
         buttonRow.add(nextButton);
         buttonRow.add(likeButton);
 
-        bottomPanel.add(flipHint, BorderLayout.NORTH);
+        JPanel labelRow = new JPanel(new GridLayout(2, 1));
+        labelRow.add(flipHint);
+        labelRow.add(historyLabel);
+
+        bottomPanel.add(labelRow, BorderLayout.NORTH);
         bottomPanel.add(buttonRow, BorderLayout.CENTER);
         bottomPanel.add(statusLabel, BorderLayout.SOUTH);
         add(bottomPanel, BorderLayout.SOUTH);
@@ -233,6 +276,34 @@ public class MealSwipingPanel extends JPanel {
         cl.show(cardPanel, showingFront ? "front" : "back");
     }
 
+    // Display a meal from history without fetching from API
+    private void displayMealFromHistory(MealData meal) {
+        showingFront = true;
+        CardLayout cl = (CardLayout) cardPanel.getLayout();
+        cl.show(cardPanel, "front");
+
+        mealName = meal.name;
+        mealCategory = meal.category;
+        mealArea = meal.area;
+        mealImage = meal.image;
+        ingredients = meal.ingredients;
+        calories = meal.calories;
+        fat = meal.fat;
+        protein = meal.protein;
+        carbs = meal.carbs;
+
+        updateFrontUI();
+        updateBackUI();
+    }
+
+    private void updateHistoryLabel() {
+        historyLabel.setText("Meal " + (historyIndex + 1) + " of " + mealHistory.size());
+    }
+
+    private void updateBackButton() {
+        backButton.setEnabled(historyIndex > 0);
+    }
+
     private void loadNextMeal() {
         showingFront = true;
         CardLayout cl = (CardLayout) cardPanel.getLayout();
@@ -242,6 +313,7 @@ public class MealSwipingPanel extends JPanel {
         imageLabel.setText("Loading...");
         nameLabel.setText("Finding a meal for you...");
         categoryLabel.setText("");
+        historyLabel.setText("Loading...");
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             private boolean found = false;
@@ -261,8 +333,24 @@ public class MealSwipingPanel extends JPanel {
             @Override
             protected void done() {
                 if (found) {
+                    // Save meal to history
+                    MealData newMeal = new MealData(
+                            mealName, mealCategory, mealArea, ingredients,
+                            calories, fat, protein, carbs, mealImage);
+
+                    // If we navigated back and now go forward
+                    // remove any forward history beyond current index
+                    while (mealHistory.size() > historyIndex + 1) {
+                        mealHistory.remove(mealHistory.size() - 1);
+                    }
+
+                    mealHistory.add(newMeal);
+                    historyIndex = mealHistory.size() - 1;
+
                     updateFrontUI();
                     updateBackUI();
+                    updateHistoryLabel();
+                    updateBackButton();
                 } else {
                     showNoMealsFound();
                 }
@@ -273,7 +361,6 @@ public class MealSwipingPanel extends JPanel {
 
     private boolean fetchMealData() {
         try {
-            // Step 1: Fetch meal from TheMealDB
             URL url = new URL(MEALDB_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
@@ -284,15 +371,13 @@ public class MealSwipingPanel extends JPanel {
             JSONObject root = new JSONObject(response);
             JSONObject meal = root.getJSONArray("meals").getJSONObject(0);
 
-            // Extract meal ingredients
-            List<String> mealIngredients = new java.util.ArrayList<>();
+            List<String> mealIngredients = new ArrayList<>();
             for (int i = 1; i <= 20; i++) {
                 String ingr = meal.optString("strIngredient" + i, "").trim();
                 if (!ingr.isEmpty())
                     mealIngredients.add(ingr.toLowerCase());
             }
 
-            // Check if meal matches user preferences
             if (userPreferences != null && !userPreferences.isEmpty()) {
                 boolean hasMatch = false;
                 for (String mealIngr : mealIngredients) {
@@ -310,7 +395,6 @@ public class MealSwipingPanel extends JPanel {
                     return false;
             }
 
-            // Store meal data
             mealName = meal.optString("strMeal", "Unknown");
             mealCategory = meal.optString("strCategory", "");
             mealArea = meal.optString("strArea", "");
@@ -332,25 +416,20 @@ public class MealSwipingPanel extends JPanel {
                 mealImage = ImageIO.read(new URL(imageUrl));
             }
 
-            // Step 2: Fetch nutrition from CalorieNinjas
             if (!CALORIE_API_KEY.isEmpty()) {
-                // Clean meal name
                 String cleanName = mealName
                         .replaceAll("[^a-zA-Z0-9 ]", " ")
                         .replaceAll("\\s+", " ")
                         .trim();
 
-                // Try full meal name first
                 boolean nutritionFound = fetchNutrition(cleanName);
 
-                // Try first two words if full name fails
                 if (!nutritionFound && cleanName.contains(" ")) {
                     String shortName = cleanName.split(" ")[0] + " "
                             + cleanName.split(" ")[1];
                     nutritionFound = fetchNutrition(shortName);
                 }
 
-                // Try main ingredient if name attempts fail
                 if (!nutritionFound && !mealIngredients.isEmpty()) {
                     nutritionFound = fetchNutrition(mealIngredients.get(0));
                 }
@@ -415,11 +494,13 @@ public class MealSwipingPanel extends JPanel {
         cardPanel.setBackground(new Color(240, 240, 240));
         likeButton.setEnabled(false);
         dislikeButton.setEnabled(false);
+        historyLabel.setText("");
     }
 
     private void updateFrontUI() {
         likeButton.setEnabled(true);
         dislikeButton.setEnabled(true);
+        cardPanel.setBackground(new Color(255, 248, 220));
         nameLabel.setFont(new Font(null, Font.BOLD, 16));
         nameLabel.setText(mealName);
         categoryLabel.setText(mealCategory + (mealArea.isEmpty() ? "" : " · " + mealArea));
