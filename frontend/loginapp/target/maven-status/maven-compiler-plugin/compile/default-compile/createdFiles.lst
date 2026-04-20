@@ -2,6 +2,7 @@ com/loginapp/App.class
 com/loginapp/SettingsPanel.class
 com/loginapp/MealSwipingPanel$1.class
 com/loginapp/main.class
+com/loginapp/QuestionairePage.class
 com/loginapp/MealSwipingPanel$2.class
 com/loginapp/MealSwipingPanel.class
 com/loginapp/Login.class

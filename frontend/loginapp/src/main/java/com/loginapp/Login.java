@@ -73,7 +73,8 @@ public class Login implements ActionListener {
                 messageLabel.setForeground(Color.RED);
                 messageLabel.setText("Username not found!!!!");
             }
-        } else if (e.getSource() == registerButton) {
+        }
+         else if (e.getSource() == registerButton) {
             String UserID = userIDField.getText();
             String password = String.valueOf(userPasswordField.getPassword());
 
@@ -87,6 +88,9 @@ public class Login implements ActionListener {
                 logininfo.put(UserID, password);
                 messageLabel.setForeground(Color.GREEN);
                 messageLabel.setText("Registered!");
+
+                frame.dispose();
+                new QuestionairePage(UserID, db);
             } else {
                 messageLabel.setForeground(Color.RED);
                 messageLabel.setText("User exists!");

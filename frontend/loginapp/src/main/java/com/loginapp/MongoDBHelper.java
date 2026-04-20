@@ -63,6 +63,30 @@ public class MongoDBHelper {
         }
         return null;
     }
+    public void saveUserGoals(String username, String goal, String activityLevel) {
+        Document preferenceData = new Document("fitnessGoal", goal)
+                                .append("activityLevel", activityLevel);
+
+        Document updateOperation = new Document("$set", preferenceData);
+
+        usersCollection.updateOne(
+            new Document("username", username),
+            updateOperation
+        );
+    }
+
+    public HashMap<String, String> loadUserGoals(String username) {
+        HashMap<String, String> goals = new HashMap<>();
+        Document user = usersCollection.find(new Document("username", username)).first();
+
+        if(user != null && user.containsKey("userGoals")) {
+            Document goalDoc = (Document) user.get("userGoals");
+            goals.put("goal", goalDoc.getString("fitnessGoal"));
+            goals.put("activity", goalDoc.getString("activityLevel"));
+
+        }
+        return goals;
+    }
 
     public void close() {
         mongoClient.close();
