@@ -5,7 +5,6 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.HashMap;
-
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -78,14 +77,45 @@ public class Login implements ActionListener {
             String UserID = userIDField.getText();
             String password = String.valueOf(userPasswordField.getPassword());
 
-            if (UserID.isEmpty() || password.isEmpty()) {
+            if (userID.isEmpty() || password.isEmpty()) {
                 messageLabel.setForeground(Color.RED);
                 messageLabel.setText("Fill both fields!");
                 return;
             }
-            boolean success = db.saveUser(UserID, password);
+
+            // Check username exists then verify hashed password
+            if (!db.userExists(userID)) {
+                messageLabel.setForeground(Color.RED);
+                messageLabel.setText("Username not found!");
+            } else if (db.verifyPassword(userID, password)) {
+                messageLabel.setForeground(Color.GREEN);
+                messageLabel.setText("Success");
+                frame.dispose();
+                new HomePage(userID, db);
+            } else {
+                messageLabel.setForeground(Color.RED);
+                messageLabel.setText("Invalid password!");
+            }
+
+        } else if (e.getSource() == registerButton) {
+            String userID = userIDField.getText();
+            String password = String.valueOf(userPasswordField.getPassword());
+
+            if (userID.isEmpty() || password.isEmpty()) {
+                messageLabel.setForeground(Color.RED);
+                messageLabel.setText("Fill both fields!");
+                return;
+            }
+
+            // Basic password validation
+            if (password.length() < 6) {
+                messageLabel.setForeground(Color.RED);
+                messageLabel.setText("Min 6 characters!");
+                return;
+            }
+
+            boolean success = db.saveUser(userID, password);
             if (success) {
-                logininfo.put(UserID, password);
                 messageLabel.setForeground(Color.GREEN);
                 messageLabel.setText("Registered!");
 
