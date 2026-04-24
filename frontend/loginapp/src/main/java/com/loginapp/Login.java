@@ -5,6 +5,7 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.HashMap;
+
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -53,78 +54,49 @@ public class Login implements ActionListener {
         frame.setLayout(null);
         frame.setVisible(true);
     }
-
+    @Override
     public void actionPerformed(ActionEvent e) {
-        if (e.getSource() == loginButton) {
-            String UserID = userIDField.getText();
-            String password = String.valueOf(userPasswordField.getPassword());
-            if (logininfo.containsKey(UserID)) {
-                if (logininfo.get(UserID).equals(password)) {
-                    messageLabel.setForeground(Color.GREEN);
-                    frame.dispose();
-                    messageLabel.setText("Success");
-                    HomePage homepage = new HomePage(UserID, db);
-                } else {
-                    messageLabel.setForeground(Color.RED);
-                    messageLabel.setText("Invalid");
-                }
-            } else {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Username not found!!!!");
-            }
+    String userID = userIDField.getText();
+    String password = String.valueOf(userPasswordField.getPassword());
+
+    if (e.getSource() == loginButton) {
+        // Use your friend's new hashing verification
+        if (db.verifyPassword(userID, password)) {
+            messageLabel.setForeground(Color.GREEN);
+            messageLabel.setText("Success");
+            frame.dispose();
+            new HomePage(userID, db);
+        } else {
+            messageLabel.setForeground(Color.RED);
+            messageLabel.setText("Invalid username or password!");
         }
-         else if (e.getSource() == registerButton) {
-            String UserID = userIDField.getText();
-            String password = String.valueOf(userPasswordField.getPassword());
+    } 
+    else if (e.getSource() == registerButton) {
+        if (userID.isEmpty() || password.isEmpty()) {
+            messageLabel.setForeground(Color.RED);
+            messageLabel.setText("Fill both fields!");
+            return;
+        }
 
-            if (userID.isEmpty() || password.isEmpty()) {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Fill both fields!");
-                return;
-            }
+        if (password.length() < 6) {
+            messageLabel.setForeground(Color.RED);
+            messageLabel.setText("Min 6 characters!");
+            return;
+        }
 
-            // Check username exists then verify hashed password
-            if (!db.userExists(userID)) {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Username not found!");
-            } else if (db.verifyPassword(userID, password)) {
-                messageLabel.setForeground(Color.GREEN);
-                messageLabel.setText("Success");
-                frame.dispose();
-                new HomePage(userID, db);
-            } else {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Invalid password!");
-            }
-
-        } else if (e.getSource() == registerButton) {
-            String userID = userIDField.getText();
-            String password = String.valueOf(userPasswordField.getPassword());
-
-            if (userID.isEmpty() || password.isEmpty()) {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Fill both fields!");
-                return;
-            }
-
-            // Basic password validation
-            if (password.length() < 6) {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Min 6 characters!");
-                return;
-            }
-
-            boolean success = db.saveUser(userID, password);
-            if (success) {
-                messageLabel.setForeground(Color.GREEN);
-                messageLabel.setText("Registered!");
-
-                frame.dispose();
-                new QuestionairePage(UserID, db);
-            } else {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("User exists!");
-            }
+        // saveUser handles the check for existing users automatically
+        boolean success = db.saveUser(userID, password);
+        
+        if (success) {
+            messageLabel.setForeground(Color.GREEN);
+            messageLabel.setText("Registered!");
+            frame.dispose();
+            // This triggers your new Questionnaire
+            new QuestionairePage(userID, db);
+        } else {
+            messageLabel.setForeground(Color.RED);
+            messageLabel.setText("User already exists!");
         }
     }
+}
 }
