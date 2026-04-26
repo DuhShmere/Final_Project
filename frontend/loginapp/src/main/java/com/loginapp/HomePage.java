@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
+
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -42,7 +43,7 @@ public class HomePage {
         navBar.add(settingsBtn);
         navBar.add(logOutBtn);
 
-        mealPlanBtn.addActionListener(e -> showPage(new MealPlanPanel(), false));
+        mealPlanBtn.addActionListener(e -> showPage(new MealPlanPanel(db, username, () -> {}), false));
         homeBtn.addActionListener(e -> showPage(homeLabel, true));
         mealSwipeBtn.addActionListener(e -> showPage(new MealSwipingPanel(db, username), false));
         viewRecipesBtn.addActionListener(e -> showPage(new ViewRecipesPanel(db, username), false));

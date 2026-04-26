@@ -1,11 +1,16 @@
 package com.loginapp;
 
-import com.mongodb.client.*;
-import org.bson.Document;
-import org.mindrot.jbcrypt.BCrypt;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import org.bson.Document;
+import org.mindrot.jbcrypt.BCrypt;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
 
 public class MongoDBHelper {
 
@@ -88,11 +93,19 @@ public class MongoDBHelper {
         }
         return null;
     }
-    public void saveUserGoals(String username, String goal, String activityLevel) {
+    public void saveUserGoals(String username, String goal, String activityLevel, int age, double weight, int heightFt, int heightIn, String sex, int tdee, int targetCalories, int proteinGrams, int carbGrams, int fatGrams) {
         Document preferenceData = new Document("fitnessGoal", goal)
-                                .append("activityLevel", activityLevel);
-
-        Document updateOperation = new Document("$set", preferenceData);
+                                .append("activityLevel", activityLevel)
+                                .append("weightLbs", weight)
+                                .append("heightFt", heightFt)
+                                .append("heightIn", heightIn)
+                                .append("sex", sex)
+                                .append("tdee", tdee)
+                                .append("targetCalories", targetCalories)
+                                .append("protienGrams", proteinGrams)
+                                .append("carbGrams", carbGrams)
+                                .append("fatGrams", fatGrams);
+        Document updateOperation = new Document("$set", new Document("userGoals", preferenceData));
 
         usersCollection.updateOne(
             new Document("username", username),
@@ -108,6 +121,15 @@ public class MongoDBHelper {
             Document goalDoc = (Document) user.get("userGoals");
             goals.put("goal", goalDoc.getString("fitnessGoal"));
             goals.put("activity", goalDoc.getString("activityLevel"));
+            goals.put("weight", String.valueOf(goalDoc.getDouble("weightLbs")));
+            goals.put("heightFt", String.valueOf(goalDoc.getInteger("heightFt")));
+            goals.put("heightIn", String.valueOf(goalDoc.getInteger("heightIn")));
+            goals.put("sex", goalDoc.getString("sex"));
+            goals.put("targetCalories", String.valueOf(goalDoc.getInteger("targetCalories")));
+            goals.put("protienGrams", String.valueOf(goalDoc.getInteger("protienGrams")));
+            goals.put("carbGrams", String.valueOf(goalDoc.getInteger("carbGrams")));
+            goals.put("fatGrams", String.valueOf(goalDoc.getInteger("fatGrams")));
+
 
         }
         return goals;
@@ -145,6 +167,20 @@ public class MongoDBHelper {
         return new ArrayList<>();
     }
 
+    public void saveMealPlanSelection(String username, String planName) {
+    usersCollection.updateOne(
+        new Document("username", username),
+        new Document("$set", new Document("selectedMealPlan", planName))
+    );
+}
+
+    public String loadSavedMealPlan(String username) {
+        Document user = usersCollection.find(new Document("username", username)).first();
+        if (user != null && user.containsKey("selectedMealPlan")) {
+            return user.getString("selectedMealPlan");
+            }
+            return null;
+     }
     public void close() {
         mongoClient.close();
     }
