@@ -1,15 +1,34 @@
 package com.loginapp;
 
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
+import java.util.Map;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.SwingWorker;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -40,15 +59,15 @@ public class SettingsPanel extends JPanel {
 
         // Top bar
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton homeBtn = new JButton("← Home");
+        //JButton homeBtn = new JButton("← Home");
         JButton saveBtn = new JButton("Save Preferences");
         JLabel savedLabel = new JLabel("");
         savedLabel.setForeground(Color.GREEN);
 
-        homeBtn.addActionListener(e -> {
-            savePreferences();
-            onHome.run();
-        });
+        //homeBtn.addActionListener(e -> {
+            //savePreferences();
+            //onHome.run();
+        //});
 
         saveBtn.addActionListener(e -> {
             savePreferences();
@@ -56,7 +75,7 @@ public class SettingsPanel extends JPanel {
                     JOptionPane.INFORMATION_MESSAGE);
         });
 
-        topBar.add(homeBtn);
+       // topBar.add(homeBtn);
         topBar.add(saveBtn);
         topBar.add(savedLabel);
         add(topBar, BorderLayout.NORTH);
