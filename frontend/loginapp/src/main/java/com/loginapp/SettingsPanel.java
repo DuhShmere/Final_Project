@@ -355,11 +355,15 @@ public class SettingsPanel extends JPanel {
     }
 
     private void savePreferences() {
-        List<String> checked = new ArrayList<>();
-        for (JCheckBox cb : allCheckBoxes) {
-            if (cb.isSelected())
-                checked.add(cb.getText());
-        }
-        db.saveUserPreferences(username, checked);
+    List<String> checked = new ArrayList<>();
+    List<String> unchecked = new ArrayList<>();
+    for (JCheckBox cb : allCheckBoxes) {
+        if (cb.isSelected())
+            checked.add(cb.getText());
+        else
+            unchecked.add(cb.getText());
     }
+    db.saveUserPreferences(username, checked);
+    db.saveDeselectedIngredients(username, unchecked);
+}
 }

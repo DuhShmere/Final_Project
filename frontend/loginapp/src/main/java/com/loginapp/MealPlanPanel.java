@@ -58,7 +58,7 @@ public class MealPlanPanel extends JPanel {
         contentPanel.repaint();
 
         //section 1 - weight loss
-         contentPanel.add(makeSectionHeader("Weight Loss Plans", new Color(70, 130, 18, 0)));
+         contentPanel.add(makeSectionHeader("Weight Loss Plans", new Color(70, 130, 180)));
         contentPanel.add(Box.createVerticalStrut(10));
         for (MealPlanData.MealPlan plan : MealPlanData.getPlansByCategory("Weight Loss")) {
             boolean recommended = plan.name.equals(recommendation);
@@ -73,7 +73,7 @@ public class MealPlanPanel extends JPanel {
 
 
         //section 2 - maintenance
-        contentPanel.add(makeSectionHeader("Maintenance Plans", new Color(70, 130, 18, 0)));
+        contentPanel.add(makeSectionHeader("Maintenance Plans", new Color(70, 130, 180)));
         contentPanel.add(Box.createVerticalStrut(10));
         for (MealPlanData.MealPlan plan : MealPlanData.getPlansByCategory("Maintenance")) {
             boolean recommended = plan.name.equals(recommendation);
@@ -87,9 +87,9 @@ public class MealPlanPanel extends JPanel {
 
 
         //section 3 - weight gain
-        contentPanel.add(makeSectionHeader("Weight Gain Plans", new Color(70, 130, 18, 0)));
+        contentPanel.add(makeSectionHeader("Weight Gain Plans", new Color(70, 130, 180)));
         contentPanel.add(Box.createVerticalStrut(10));
-        for (MealPlanData.MealPlan plan : MealPlanData.getPlansByCategory("Weight Gain")) {
+        for (MealPlanData.MealPlan plan : MealPlanData.getPlansByCategory("Muscle Gain")) {
             boolean recommended = plan.name.equals(recommendation);
             contentPanel.add(makePlanCard(plan, savedPlan, recommended, db, username, onPlanSelected));
             contentPanel.add(Box.createVerticalStrut(10));

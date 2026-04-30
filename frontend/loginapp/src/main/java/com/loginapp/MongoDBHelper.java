@@ -93,6 +93,20 @@ public class MongoDBHelper {
         }
         return null;
     }
+    public List<String> loadDeselectedIngredients(String username) {
+    Document user = usersCollection.find(new Document("username", username)).first();
+    if (user != null && user.containsKey("deselectedIngredients")) {
+        return user.getList("deselectedIngredients", String.class);
+    }
+    return new ArrayList<>();
+}
+
+public void saveDeselectedIngredients(String username, List<String> deselected) {
+    usersCollection.updateOne(
+        new Document("username", username),
+        new Document("$set", new Document("deselectedIngredients", deselected))
+    );
+}
     public void saveUserGoals(String username, String goal, String activityLevel, int age, double weight, int heightFt, int heightIn, String sex, int tdee, int targetCalories, int proteinGrams, int carbGrams, int fatGrams) {
         Document preferenceData = new Document("fitnessGoal", goal)
                                 .append("activityLevel", activityLevel)
@@ -135,19 +149,26 @@ public class MongoDBHelper {
         return goals;
     }
 
-    public void saveLikedMeal(String username, String mealName, String category, String calories) {
-        Document meal = new Document("name", mealName)
-                .append("category", category)
-                .append("calories", calories);
+    public void saveLikedMeal(String username, String mealName, String category,
+                           String calories, String fat, String protein,
+                           String carbs, String ingredients, String imageUrl) {
+    Document meal = new Document("name", mealName)
+            .append("category", category)
+            .append("calories", calories)
+            .append("fat", fat)
+            .append("protein", protein)
+            .append("carbs", carbs)
+            .append("ingredients", ingredients)
+            .append("imageUrl", imageUrl);
 
-        usersCollection.updateOne(
-                new Document("username", username),
-                new Document("$addToSet", new Document("likedMeals", meal)));
+    usersCollection.updateOne(
+            new Document("username", username),
+            new Document("$addToSet", new Document("likedMeals", meal)));
 
-        usersCollection.updateOne(
-                new Document("username", username),
-                new Document("$pull", new Document("dislikedMeals", mealName)));
-    }
+    usersCollection.updateOne(
+            new Document("username", username),
+            new Document("$pull", new Document("dislikedMeals", mealName)));
+}
 
     public void saveDislikedMeal(String username, String mealName) {
         usersCollection.updateOne(

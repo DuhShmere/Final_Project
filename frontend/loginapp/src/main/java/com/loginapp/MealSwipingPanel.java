@@ -18,6 +18,7 @@ public class MealSwipingPanel extends JPanel {
 
     private static final String MEALDB_URL = "https://www.themealdb.com/api/json/v1/1/random.php";
     private static final String CALORIE_URL = "https://api.calorieninjas.com/v1/nutrition?query=";
+    private String imageUrl = "";
     private static final int MAX_ATTEMPTS = 20;
     private static final String CALORIE_API_KEY;
 
@@ -146,10 +147,11 @@ public class MealSwipingPanel extends JPanel {
         backButton.setEnabled(false);
 
         likeButton.addActionListener(e -> {
-            db.saveLikedMeal(username, mealName, mealCategory, calories);
-            statusLabel.setForeground(new Color(0, 150, 0));
-            statusLabel.setText("Liked: " + mealName + " saved!");
-        });
+    db.saveLikedMeal(username, mealName, mealCategory, calories,
+                     fat, protein, carbs, ingredients, imageUrl);
+    statusLabel.setForeground(new Color(0, 150, 0));
+    statusLabel.setText("Liked: " + mealName + " saved!");
+});
 
         dislikeButton.addActionListener(e -> {
             db.saveDislikedMeal(username, mealName);
@@ -412,8 +414,9 @@ public class MealSwipingPanel extends JPanel {
             ingredients = ingrBuilder.toString();
 
             String imageUrl = meal.optString("strMealThumb", "");
-            if (!imageUrl.isEmpty()) {
-                mealImage = ImageIO.read(new URL(imageUrl));
+                if (!imageUrl.isEmpty()) {
+                 this.imageUrl = imageUrl; // save it
+            mealImage = ImageIO.read(new URL(imageUrl));
             }
 
             if (!CALORIE_API_KEY.isEmpty()) {
