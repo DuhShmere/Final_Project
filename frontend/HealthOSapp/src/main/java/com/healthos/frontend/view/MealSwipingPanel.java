@@ -1,43 +1,23 @@
 package com.healthos.frontend.view;
-import com.healthos.backend.database.*;
-import com.healthos.backend.model.*;
-import com.healthos.backend.model.*;
+
+import com.healthos.backend.database.MongoDBHelper;
+import com.healthos.frontend.controller.MealController;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import io.github.cdimascio.dotenv.Dotenv;
 
 public class MealSwipingPanel extends JPanel {
 
-    private static final String MEALDB_URL = "https://www.themealdb.com/api/json/v1/1/random.php";
-    private static final String CALORIE_URL = "https://api.calorieninjas.com/v1/nutrition?query=";
-    private String imageUrl = "";
     private static final int MAX_ATTEMPTS = 20;
-    private static final String CALORIE_API_KEY;
+    private String imageUrl = "";
 
-    static {
-        Dotenv dotenv = Dotenv.configure()
-                .directory(System.getProperty("user.dir"))
-                .ignoreIfMissing()
-                .load();
-        CALORIE_API_KEY = dotenv.get("CALORIE_API_KEY", "");
-    }
-
-    // Meal history for back button
     private List<MealData> mealHistory = new ArrayList<>();
     private int historyIndex = -1;
 
-    // Inner class to store all data for a single meal
     private static class MealData {
         String name, category, area, ingredients;
         String calories, fat, protein, carbs;
@@ -72,9 +52,7 @@ public class MealSwipingPanel extends JPanel {
     private String carbs = "--";
     private String ingredients = "";
 
-    // MongoDB and user
-    private MongoDBHelper db;
-    private String username;
+    private MealController mealController;
 
     // UI Components
     private JPanel cardPanel = new JPanel();
@@ -97,10 +75,8 @@ public class MealSwipingPanel extends JPanel {
     private JLabel historyLabel = new JLabel("", JLabel.CENTER);
 
     public MealSwipingPanel(MongoDBHelper db, String username) {
-        this.db = db;
-        this.username = username;
-
-        userPreferences = db.loadUserPreferences(username);
+        this.mealController = new MealController(db, username);
+        userPreferences = mealController.loadUserPreferences();
 
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
@@ -150,14 +126,14 @@ public class MealSwipingPanel extends JPanel {
         backButton.setEnabled(false);
 
         likeButton.addActionListener(e -> {
-            db.saveLikedMeal(username, mealName, mealCategory, calories,
+            mealController.saveLikedMeal(mealName, mealCategory, calories,
                     fat, protein, carbs, ingredients, imageUrl);
             statusLabel.setForeground(new Color(0, 150, 0));
             statusLabel.setText("Liked: " + mealName + " saved!");
         });
 
         dislikeButton.addActionListener(e -> {
-            db.saveDislikedMeal(username, mealName);
+            mealController.saveDislikedMeal(mealName);
             statusLabel.setForeground(new Color(180, 0, 0));
             statusLabel.setText("Disliked: " + mealName);
         });
@@ -320,175 +296,57 @@ public class MealSwipingPanel extends JPanel {
         categoryLabel.setText("");
         historyLabel.setText("Loading...");
 
-        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
-            private boolean found = false;
-
+        SwingWorker<MealController.MealFetchResult, Void> worker =
+                new SwingWorker<MealController.MealFetchResult, Void>() {
             @Override
-            protected Void doInBackground() throws Exception {
+            protected MealController.MealFetchResult doInBackground() {
                 for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-                    boolean matches = fetchMealData();
-                    if (matches) {
-                        found = true;
-                        break;
-                    }
+                    MealController.MealFetchResult result = mealController.fetchMealData(userPreferences);
+                    if (result != null) return result;
                 }
                 return null;
             }
 
             @Override
             protected void done() {
-                if (found) {
-                    // Save meal to history
-                    MealData newMeal = new MealData(
-                            mealName, mealCategory, mealArea, ingredients,
-                            calories, fat, protein, carbs, mealImage);
+                try {
+                    MealController.MealFetchResult result = get();
+                    if (result != null) {
+                        mealName = result.name;
+                        mealCategory = result.category;
+                        mealArea = result.area;
+                        ingredients = result.ingredients;
+                        calories = result.calories;
+                        fat = result.fat;
+                        protein = result.protein;
+                        carbs = result.carbs;
+                        mealImage = result.image;
+                        imageUrl = result.imageUrl;
 
-                    // If we navigated back and now go forward
-                    // remove any forward history beyond current index
-                    while (mealHistory.size() > historyIndex + 1) {
-                        mealHistory.remove(mealHistory.size() - 1);
+                        MealData newMeal = new MealData(
+                                mealName, mealCategory, mealArea, ingredients,
+                                calories, fat, protein, carbs, mealImage);
+
+                        while (mealHistory.size() > historyIndex + 1) {
+                            mealHistory.remove(mealHistory.size() - 1);
+                        }
+
+                        mealHistory.add(newMeal);
+                        historyIndex = mealHistory.size() - 1;
+
+                        updateFrontUI();
+                        updateBackUI();
+                        updateHistoryLabel();
+                        updateBackButton();
+                    } else {
+                        showNoMealsFound();
                     }
-
-                    mealHistory.add(newMeal);
-                    historyIndex = mealHistory.size() - 1;
-
-                    updateFrontUI();
-                    updateBackUI();
-                    updateHistoryLabel();
-                    updateBackButton();
-                } else {
+                } catch (Exception ex) {
                     showNoMealsFound();
                 }
             }
         };
         worker.execute();
-    }
-
-    private boolean fetchMealData() {
-        try {
-            URL url = new URL(MEALDB_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            InputStream is = conn.getInputStream();
-            String response = new String(is.readAllBytes());
-            conn.disconnect();
-
-            JSONObject root = new JSONObject(response);
-            JSONObject meal = root.getJSONArray("meals").getJSONObject(0);
-
-            List<String> mealIngredients = new ArrayList<>();
-            for (int i = 1; i <= 20; i++) {
-                String ingr = meal.optString("strIngredient" + i, "").trim();
-                if (!ingr.isEmpty())
-                    mealIngredients.add(ingr.toLowerCase());
-            }
-
-            if (userPreferences != null && !userPreferences.isEmpty()) {
-                boolean hasMatch = false;
-                for (String mealIngr : mealIngredients) {
-                    for (String pref : userPreferences) {
-                        if (pref.toLowerCase().contains(mealIngr) ||
-                                mealIngr.contains(pref.toLowerCase())) {
-                            hasMatch = true;
-                            break;
-                        }
-                    }
-                    if (hasMatch)
-                        break;
-                }
-                if (!hasMatch)
-                    return false;
-            }
-
-            mealName = meal.optString("strMeal", "Unknown");
-            mealCategory = meal.optString("strCategory", "");
-            mealArea = meal.optString("strArea", "");
-
-            StringBuilder ingrBuilder = new StringBuilder();
-            for (int i = 1; i <= 20; i++) {
-                String ingr = meal.optString("strIngredient" + i, "").trim();
-                String measure = meal.optString("strMeasure" + i, "").trim();
-                if (!ingr.isEmpty()) {
-                    if (ingrBuilder.length() > 0)
-                        ingrBuilder.append(", ");
-                    ingrBuilder.append(measure).append(" ").append(ingr);
-                }
-            }
-            ingredients = ingrBuilder.toString();
-
-            String imageUrl = meal.optString("strMealThumb", "");
-            if (!imageUrl.isEmpty()) {
-                this.imageUrl = imageUrl; // save it
-                mealImage = ImageIO.read(new URL(imageUrl));
-            }
-
-            if (!CALORIE_API_KEY.isEmpty()) {
-                String cleanName = mealName
-                        .replaceAll("[^a-zA-Z0-9 ]", " ")
-                        .replaceAll("\\s+", " ")
-                        .trim();
-
-                boolean nutritionFound = fetchNutrition(cleanName);
-
-                if (!nutritionFound && cleanName.contains(" ")) {
-                    String shortName = cleanName.split(" ")[0] + " "
-                            + cleanName.split(" ")[1];
-                    nutritionFound = fetchNutrition(shortName);
-                }
-
-                if (!nutritionFound && !mealIngredients.isEmpty()) {
-                    nutritionFound = fetchNutrition(mealIngredients.get(0));
-                }
-
-                if (!nutritionFound) {
-                    calories = "N/A";
-                    fat = "N/A";
-                    protein = "N/A";
-                    carbs = "N/A";
-                }
-            } else {
-                calories = "N/A";
-                fat = "N/A";
-                protein = "N/A";
-                carbs = "N/A";
-            }
-
-            return true;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    private boolean fetchNutrition(String query) {
-        try {
-            String encodedQuery = query.replace(" ", "+");
-            URL calUrl = new URL(CALORIE_URL + encodedQuery);
-            HttpURLConnection calConn = (HttpURLConnection) calUrl.openConnection();
-            calConn.setRequestMethod("GET");
-            calConn.setRequestProperty("X-Api-Key", CALORIE_API_KEY);
-
-            InputStream calIs = calConn.getInputStream();
-            String calResponse = new String(calIs.readAllBytes());
-            calConn.disconnect();
-
-            JSONObject calRoot = new JSONObject(calResponse);
-            JSONArray items = calRoot.getJSONArray("items");
-
-            if (items.length() > 0) {
-                JSONObject nutrition = items.getJSONObject(0);
-                calories = String.format("%.0f", nutrition.optDouble("calories", 0));
-                fat = String.format("%.1f", nutrition.optDouble("fat_total_g", 0));
-                protein = String.format("%.1f", nutrition.optDouble("protein_g", 0));
-                carbs = String.format("%.1f", nutrition.optDouble("carbohydrates_total_g", 0));
-                return true;
-            }
-            return false;
-
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     private void showNoMealsFound() {

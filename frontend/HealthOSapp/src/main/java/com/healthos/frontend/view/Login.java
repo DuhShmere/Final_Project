@@ -1,10 +1,7 @@
 package com.healthos.frontend.view;
 
-import com.healthos.backend.database.*;
-import com.healthos.backend.model.*;
-import com.healthos.backend.model.*;
-
 import com.healthos.backend.database.MongoDBHelper;
+import com.healthos.frontend.controller.LoginController;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -54,12 +51,12 @@ public class Login implements ActionListener {
     JButton registerButton;
     JLabel messageLabel;
 
-    HashMap<String, String> logininfo;
     MongoDBHelper db;
+    LoginController loginController;
 
     public Login(HashMap<String, String> OGlogingfo, MongoDBHelper db) {
         this.db = db;
-        logininfo = OGlogingfo;
+        this.loginController = new LoginController(db);
 
         frame.setTitle("HealthOS");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -300,8 +297,8 @@ public class Login implements ActionListener {
         String password = String.valueOf(userPasswordField.getPassword());
 
         if (e.getSource() == loginButton) {
-            // Use your friend's new hashing verification
-            if (db.verifyPassword(userID, password)) {
+            LoginController.LoginResult result = loginController.login(userID, password);
+            if (result == LoginController.LoginResult.SUCCESS) {
                 messageLabel.setForeground(Color.GREEN);
                 messageLabel.setText("Success");
                 frame.dispose();
@@ -311,30 +308,26 @@ public class Login implements ActionListener {
                 messageLabel.setText("Invalid username or password!");
             }
         } else if (e.getSource() == registerButton) {
-            if (userID.isEmpty() || password.isEmpty()) {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Fill both fields!");
-                return;
-            }
-
-            if (password.length() < 6) {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("Min 6 characters!");
-                return;
-            }
-
-            // saveUser handles the check for existing users automatically
-            boolean success = db.saveUser(userID, password);
-
-            if (success) {
-                messageLabel.setForeground(Color.GREEN);
-                messageLabel.setText("Registered!");
-                frame.dispose();
-                // This triggers your new Questionnaire
-                new QuestionairePage(userID, db);
-            } else {
-                messageLabel.setForeground(Color.RED);
-                messageLabel.setText("User already exists!");
+            LoginController.RegisterResult result = loginController.register(userID, password);
+            switch (result) {
+                case EMPTY_FIELDS:
+                    messageLabel.setForeground(Color.RED);
+                    messageLabel.setText("Fill both fields!");
+                    break;
+                case PASSWORD_TOO_SHORT:
+                    messageLabel.setForeground(Color.RED);
+                    messageLabel.setText("Min 6 characters!");
+                    break;
+                case SUCCESS:
+                    messageLabel.setForeground(Color.GREEN);
+                    messageLabel.setText("Registered!");
+                    frame.dispose();
+                    new QuestionairePage(userID, db);
+                    break;
+                case USER_EXISTS:
+                    messageLabel.setForeground(Color.RED);
+                    messageLabel.setText("User already exists!");
+                    break;
             }
         }
     }

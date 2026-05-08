@@ -1,8 +1,7 @@
 package com.healthos.frontend.view;
 
-import com.healthos.backend.database.*;
-import com.healthos.backend.model.*;
-import com.healthos.backend.model.*;
+import com.healthos.backend.database.MongoDBHelper;
+import com.healthos.frontend.controller.HomeController;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -42,6 +41,7 @@ public class HomePage {
 
     MongoDBHelper db;
     String username;
+    HomeController homeController = new HomeController();
 
     HomePage(String UserID, MongoDBHelper db) {
         this.db = db;
@@ -74,10 +74,7 @@ public class HomePage {
         viewRecipesBtn.addActionListener(e -> showPage(new ViewRecipesPanel(db, username), false));
         settingsBtn.addActionListener(
                 e -> showPage(new SettingsPanel(() -> showPage(homeLabel, true), db, username), false));
-        logOutBtn.addActionListener(e -> {
-            frame.dispose();
-            System.out.println("Logged out successfully");
-        });
+        logOutBtn.addActionListener(e -> homeController.logout(frame));
 
         frame.add(navBar, BorderLayout.NORTH);
         frame.add(homeLabel, BorderLayout.CENTER);
