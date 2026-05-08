@@ -1,6 +1,10 @@
 package com.healthos.frontend.view;
+
 import com.healthos.backend.database.*;
 import com.healthos.backend.model.*;
+
+import io.github.cdimascio.dotenv.Dotenv;
+
 import com.healthos.backend.model.*;
 
 import java.awt.*;
@@ -20,7 +24,15 @@ import org.json.JSONObject;
 public class ViewRecipesPanel extends JPanel {
 
     private static final String CALORIE_URL = "https://api.calorieninjas.com/v1/nutrition?query=";
-    private static final String CALORIE_API_KEY = "8sXoC5SqpJvZg8FsOVPuGg1NNyC9CuoeqXEajJ76";
+    private static final String CALORIE_API_KEY;
+
+    static {
+        Dotenv dotenv = Dotenv.configure()
+                .directory(System.getProperty("user.dir"))
+                .ignoreIfMissing()
+                .load();
+        CALORIE_API_KEY = dotenv.get("CALORIE_API_KEY", "");
+    }
     private static final String MEALDB_SEARCH = "https://www.themealdb.com/api/json/v1/1/search.php?s=";
 
     private MongoDBHelper db;

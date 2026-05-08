@@ -28,7 +28,6 @@ public class MongoDBHelper {
     }
 
     // Returns only usernames — passwords are hashed so we
-    // can no longer store them in a plain HashMap for comparison
     public HashMap<String, String> getloginInfo() {
         HashMap<String, String> users = new HashMap<>();
         for (Document doc : usersCollection.find()) {
